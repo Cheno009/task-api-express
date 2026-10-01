@@ -1,0 +1,34 @@
+# Reflexión — Conexión con MongoDB Atlas
+
+**Nombre: Miguel Angel Pineda Chenoweth**
+**Grupo: 01**
+
+## 1. ¿Qué diferencia existe entre tu cuenta de Atlas y el usuario de base de datos?
+La cuenta de Atlas es con la que yo inicio sesión en la web de MongoDB para administrar: crear el cluster, configurar la lista de acceso de red, crear usuarios y ver métricas. El usuario de base de datos es una credencial distinta que usa la aplicación para conectarse al cluster y leer o escribir datos; es el `<usuario>:<contrasena>` que aparece dentro de `MONGODB_URI`. Mi contraseña de Atlas nunca va en el código, y el usuario de base de datos solo sirve para conectarse a los datos, no para administrar la cuenta. Si se filtra la URI, se puede cambiar o eliminar ese usuario sin tocar mi cuenta de Atlas.
+
+## 2. ¿Por qué MONGODB_URI se considera un secreto aunque el repositorio sea privado?
+Porque contiene el usuario, la contraseña y la dirección del cluster: con ella cualquiera puede conectarse y leer, modificar o borrar los datos. Que el repositorio sea privado no basta: puede hacerse público por error, se comparte con otras personas, se clona en otras máquinas y el historial de git conserva el secreto aunque después se borre el archivo. Por eso la URI real vive solo en `.env` (incluido en `.gitignore`) y en el repositorio se sube `.env.example` con valores de ejemplo como `mongodb+srv://<usuario>:<contrasena>@<cluster>.mongodb.net/...`.
+
+## 3. ¿Qué riesgo introduce permitir 0.0.0.0/0 en la lista de acceso?
+`0.0.0.0/0` significa "cualquier dirección IP de Internet". Con eso, la lista de acceso deja de ser una capa de protección y la única barrera que queda es el usuario y la contraseña. Si la URI se filtra, alguien puede conectarse desde cualquier lugar, y el cluster queda expuesto a intentos de fuerza bruta. Lo recomendable es permitir solo la IP de mi equipo (o la del servidor donde se despliegue la API) y usar `0.0.0.0/0` como mucho de forma temporal para pruebas.
+
+## 4. ¿Por qué la API espera connectDatabase antes de ejecutar app.listen?
+Para no aceptar solicitudes mientras la base de datos no está lista. En `src/server.ts`, `startServer` primero ejecuta `loadEnvironment()`, después `await connectDatabase(...)` y solo si eso termina bien llama a `app.listen(env.port, ...)`. Si la URI es incorrecta, el usuario no existe o mi IP no está en la lista de acceso, `mongoose.connect` falla (en máximo 5 segundos gracias a `serverSelectionTimeoutMS: 5000`), se muestra "No fue posible iniciar la API..." y el proceso termina con `process.exitCode = 1`. Así el error se detecta al arrancar y no queda una API "levantada" que falla en cada petición.
+
+## 5. ¿Qué comprueba readyState y qué añade el comando ping?
+`mongoose.connection.readyState` indica el estado de la conexión que Mongoose tiene guardado localmente: `0` desconectado, `1` conectado, `2` conectando, `3` desconectando. Es una comprobación rápida que no consulta al servidor. El comando `ping` (`database.admin().ping()`) sí envía una petición real al cluster y espera respuesta, así confirma que MongoDB responde en ese momento. En `checkDatabaseHealth` se usan los dos: si `readyState !== 1` se responde 503 de inmediato sin intentar el ping, y si el estado dice conectado pero el ping falla (por ejemplo, la red se cayó y Mongoose aún no lo detecta), también se responde 503 `DATABASE_UNAVAILABLE`.
+
+## 6. ¿Por qué una falla de MongoDB corresponde a infraestructura y no a validación HTTP?
+Porque la culpa no es del cliente. Los errores de validación (400, 415, 422) indican que la solicitud está mal formada o que los datos no cumplen las reglas, y el cliente puede corregirlos. Cuando MongoDB no responde, la solicitud `GET /health/database` es perfectamente válida; el problema está en un servicio del que depende el servidor. Por eso se responde 503 (Service Unavailable) con código `DATABASE_UNAVAILABLE`: indica que el servicio no está disponible temporalmente y que el cliente puede reintentar más tarde sin cambiar nada.
+
+## 7. ¿Cómo llega un AppError lanzado por getDatabaseHealth al manejador central en Express 5?
+`getDatabaseHealth` es una función `async` que hace `await checkDatabaseHealth()`. Si el servicio lanza `new AppError("La base de datos no está disponible.", 503, "DATABASE_UNAVAILABLE")`, la promesa que devuelve el controlador se rechaza. Express 5, a diferencia de Express 4, detecta automáticamente las promesas rechazadas de los handlers y llama a `next(error)` por nosotros, sin necesidad de `try/catch` ni de un wrapper como `asyncHandler`. Express salta entonces al middleware de errores registrado al final de `app.ts`, `errorHandler`, que reconoce el `AppError` con `instanceof` y responde `503` con `{ error: { code: "DATABASE_UNAVAILABLE", message, requestId } }`.
+
+## 8. ¿Qué pruebas demuestran que la incorporación de Atlas no rompió la API anterior?
+Volver a ejecutar en Postman las pruebas de `docs/pruebas-api.md` y `docs/pruebas-validacion.md` con el servidor ya conectado a Atlas, sin modificarlas, y comprobar que dan los mismos resultados: `GET /api/tasks` → 200, `GET /api/tasks/999` → 404 `TASK_NOT_FOUND`, `GET /api/tasks/abc` → 400 `INVALID_ID`, `POST` con título válido → 201, `POST` sin `Content-Type` → 415, `PATCH /api/tasks/1/status` → 200, `DELETE` → 204 y una ruta inexistente → 404 `ROUTE_NOT_FOUND`. Además se prueban los endpoints nuevos: `GET /health` → 200 `{ "status": "ok" }` y `GET /health/database` → 200 `{ "data": { "database": { "status": "connected" } } }`. Por último, `pnpm check` debe compilar sin errores de TypeScript.
+
+## 9. ¿Por qué el arreglo en memoria se conserva todavía en esta actividad?
+Porque el objetivo de esta actividad es solo establecer y verificar la conexión con Atlas, no migrar los datos. Las tareas siguen en `src/data/tasks.ts` y `task.service.ts` sigue usando ese arreglo, así que las rutas de `/api/tasks` funcionan igual que antes. Cambiar dos cosas a la vez (conexión y persistencia) haría más difícil saber qué causó un error. Primero se comprueba que la conexión funciona con `/health/database`, y en una actividad posterior se reemplaza el arreglo por un modelo de Mongoose, manteniendo los mismos controladores y respuestas.
+
+## 10. ¿Qué información debe ocultarse al cliente cuando ocurre un error de conexión?
+No se debe enviar la URI de conexión, el usuario o la contraseña, el nombre del cluster o del host, el nombre de la base de datos, el mensaje original del driver (por ejemplo `MongoServerSelectionError` con direcciones y puertos), ni el stack trace. Eso le daría a un atacante datos sobre la infraestructura. En la API, `checkDatabaseHealth` captura el error con un `catch` vacío y lo reemplaza por un mensaje genérico: `{ code: "DATABASE_UNAVAILABLE", message: "La base de datos no está disponible.", requestId }`. Del mismo modo, `server.ts` no imprime el error del driver, solo un mensaje que indica qué revisar (URI, usuario y lista de acceso).
