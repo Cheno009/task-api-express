@@ -1,4 +1,4 @@
-import type { NextFunction, Request, Response } from "express";
+/* import type { NextFunction, Request, Response } from "express";
 import { AppError } from "../errors/app-error.js";
 import { TASK_DESCRIPTION_MAX_LENGTH } from "../models/task.js";
 
@@ -36,4 +36,4 @@ export const validateTaskDescription = (
     res.locals.taskDescription = trimmed;
   }
   next();
-};
+}; */
