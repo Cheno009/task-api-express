@@ -1,107 +1,44 @@
-import 'dotenv/config';
-import type { Server } from 'node:http';
-import { app } from './app.js';
-import { connectDatabase, disconnectDatabase } from './config/database.js';
-import { loadEnvironment } from './config/env.js';
-
-const SHUTDOWN_TIMEOUT_MS = 10000;
+import type { Server } from "node:http";
+import { app } from "./app.js";
+import { connectDatabase, disconnectDatabase } from "./config/database.js";
+import { env } from "./config/env.js";
 
 let server: Server | undefined;
-let isShuttingDown = false;
 
-const closeHttpServer = (httpServer: Server): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    httpServer.close((error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve();
-    });
-    // close() deja de aceptar conexiones nuevas; esto libera las keep-alive inactivas.
-    httpServer.closeIdleConnections();
-  });
-};
-
-const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
-  if (isShuttingDown) {
-    return;
-  }
-  isShuttingDown = true;
-  console.log(`Señal ${signal} recibida. Cerrando la API...`);
-
-  // Si algo se queda colgado, se fuerza la salida sin imprimir detalles.
-  const forceExit = setTimeout(() => {
-    console.error('El cierre tardó demasiado. Terminando el proceso.');
-    process.exit(1);
-  }, SHUTDOWN_TIMEOUT_MS);
-  forceExit.unref();
-
-  let hadError = false;
-
-  // Primero HTTP: así ninguna solicitud nueva llega cuando MongoDB ya está cerrado.
-  if (server) {
-    try {
-      await closeHttpServer(server);
-      console.log('Servidor HTTP cerrado.');
-    } catch {
-      hadError = true;
-      console.error('No fue posible cerrar el servidor HTTP correctamente.');
-    }
-  }
-
-  // MongoDB se cierra aunque el paso anterior falle, para no dejar el proceso colgado.
+const start = async (): Promise<void> => {
   try {
-    await disconnectDatabase();
-  } catch {
-    hadError = true;
-    console.error('No fue posible cerrar la conexión con MongoDB correctamente.');
-  }
-
-  clearTimeout(forceExit);
-  process.exitCode = hadError ? 1 : 0;
-};
-
-const registerShutdownHandlers = (): void => {
-  const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
-  for (const signal of signals) {
-    process.on(signal, () => {
-      void shutdown(signal);
-    });
-  }
-};
-
-const startServer = async (): Promise<void> => {
-  try {
-    const env = loadEnvironment();
     await connectDatabase({
-      uri: env.mongodbUri,
-      dbName: env.mongodbDbName
+      uri: env.MONGODB_URI,
+      dbName: env.MONGODB_DB_NAME,
     });
-    server = app.listen(env.port, (error?: Error) => {
-      // Express 5 entrega aquí los errores de listen (por ejemplo, puerto ocupado).
-      if (error) {
-        console.error(`No fue posible escuchar en el puerto ${env.port}.`);
-        process.exitCode = 1;
-        void disconnectDatabase().catch(() => undefined);
-        return;
-      }
-      console.log(`API disponible en http://localhost:${env.port}`);
+    server = app.listen(env.PORT, () => {
+      console.log(`API disponible en http://localhost:${env.PORT}`);
     });
-    // Durante el cierre, se pide al cliente no reutilizar la conexión keep-alive.
-    server.on('request', (_request, response) => {
-      if (isShuttingDown) {
-        response.setHeader('Connection', 'close');
-      }
-    });
-    registerShutdownHandlers();
   } catch {
     console.error(
-      'No fue posible iniciar la API. Revise MONGODB_URI, ' +
-      'el usuario y la lista de acceso de red.'
+      "No fue posible iniciar la API. Revisa la configuración y la conexión.",
     );
     process.exitCode = 1;
   }
 };
 
-void startServer();
+const shutdown = async (signal: string): Promise<void> => {
+  console.log(`Se recibió ${signal}. Cerrando la API.`);
+  if (server) {
+    await new Promise<void>((resolve, reject) => {
+      server?.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+  await disconnectDatabase();
+};
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    void shutdown(signal).catch(() => {
+      console.error("No fue posible cerrar la API correctamente.");
+      process.exitCode = 1;
+    });
+  });
+}
+
+await start();
