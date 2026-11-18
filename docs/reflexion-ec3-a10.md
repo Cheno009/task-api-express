@@ -1,4 +1,4 @@
-# Reflexión — Autenticación, roles y seguridad HTTP
+pn# Reflexión — Autenticación, roles y seguridad HTTP
 
 **Nombre: Miguel Angel Pineda Chenoweth**
 **Grupo: 01**
@@ -12,7 +12,7 @@ Por ejemplo, si alguien toma su token, cambia el payload a `"role": "admin"` y l
 - **401 Unauthorized** significa "no sé quién eres": falta la identidad o no se puede comprobar. En el proyecto aparece cuando no se envía `Authorization` (`AUTHENTICATION_REQUIRED`), cuando el encabezado no tiene el formato `Bearer <token>` (`INVALID_AUTHORIZATION_HEADER`) y cuando el token tiene la firma alterada, ya expiró o tiene otro `iss`/`aud` (`INVALID_TOKEN`). También se usa en el login con credenciales incorrectas (`INVALID_CREDENTIALS`).
 - **403 Forbidden** significa "sé quién eres, pero no puedes hacer esto": el token es válido, pero el rol no alcanza. En el proyecto lo devuelve `requireRole("admin")` cuando un usuario con `role: "user"` intenta `DELETE /api/tasks/:id` (`FORBIDDEN`).
 
-La diferencia orienta al cliente: ante un 401 debe iniciar sesión otra vez, mientras que ante un 403 un nuevo login no sirve, porque lo que falta es permiso.
+La diferencia orienta al cliente: ante un 401 debe iniciar   sesión otra vez, mientras que ante un 403 un nuevo login no sirve, porque lo que falta es permiso.
 
 ## 3. ¿Por qué CORS no sustituye la autenticación?
 Porque CORS es una regla que aplica el **navegador**, no el servidor. `corsPolicy` solo decide si se envían los encabezados `Access-Control-Allow-*` para `CORS_ORIGIN` (`http://localhost:5173`). Con eso, el navegador permite o bloquea que el JavaScript de otra página lea la respuesta, pero no impide que la solicitud llegue a la API:

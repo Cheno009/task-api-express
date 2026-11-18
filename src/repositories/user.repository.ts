@@ -67,7 +67,11 @@ export const findUserDocumentByEmail = async (
     return query;
   });
 
-  export const createUserDocument = async (
+  export const findUserDocumentById = async (
+  id: string,
+): Promise<UserDocument | null> => execute(async () => UserModel.findById(id));
+
+export const createUserDocument = async (
   data: CreateUserRecord,
 ): Promise<UserDocument> => execute(async () => UserModel.create(data));
 

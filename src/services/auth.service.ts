@@ -3,6 +3,7 @@ import { AppError } from "../errors/app-error.js";
 import type { User } from "../models/user.js";
 import {
   createUserDocument,
+  findUserDocumentById,
   findUserDocumentByEmail,
   type UserDocument,
 } from "../repositories/user.repository.js";
@@ -68,4 +69,16 @@ export const loginUser = async (input: LoginInput): Promise<LoginResult> => {
     tokenType: "Bearer",
     expiresIn: env.JWT_EXPIRES_IN,
   };
+};
+
+export const getAuthenticatedUser = async (userId: string): Promise<User> => {
+  const document = await findUserDocumentById(userId);
+  if (!document) {
+    throw new AppError(
+      "La cuenta asociada al token ya no está disponible.",
+      401,
+      "AUTHENTICATED_USER_NOT_FOUND",
+    );
+  }
+  return toUser(document);
 };
