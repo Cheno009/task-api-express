@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/types.ts"],"version":"5.9.2"}
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/task-api.ts","./src/types.ts","./src/components/authpanel.tsx","./src/components/taskfilters.tsx","./src/components/taskform.tsx","./src/components/tasklist.tsx"],"version":"5.9.2"}

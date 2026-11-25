@@ -1,15 +1,19 @@
+import { env } from "../config/env.js";
 export const openApiDocument: Record<string, unknown> = {
   openapi: "3.1.0",
   info: {
     title: "Task API Express",
-    version: "1.0.0",
+    version: env.APP_VERSION,
     description:
       "API REST para gestionar tareas con autenticación JWT y autorización por roles.",
   },
   servers: [
     {
-      url: "http://localhost:3000",
-      description: "Entorno local",
+      url: env.PUBLIC_API_URL,
+      description:
+        env.NODE_ENV === "production"
+          ? "Entorno de producción"
+          : "Entorno local",
     },
   ],
   tags: [
@@ -33,8 +37,15 @@ export const openApiDocument: Record<string, unknown> = {
                   properties: {
                     data: {
                       type: "object",
-                      required: ["status"],
-                      properties: { status: { type: "string", example: "up" } },
+                      required: ["status", "version", "environment"],
+                      properties: {
+                        status: { type: "string", example: "up" },
+                        version: { type: "string", example: "1.0.0" },
+                        environment: {
+                          type: "string",
+                          enum: ["development", "test", "production"],
+                        },
+                      },
                     },
                   },
                 },

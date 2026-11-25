@@ -38,15 +38,51 @@ const parsePositiveInteger = (name: string, fallback: string): number => {
   return value;
 };
 
+const parseNonNegativeInteger = (name: string, fallback: string): number => {
+  const value = Number(process.env[name] ?? fallback);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(
+      `${name} debe ser un número entero mayor o igual que cero.`,
+    );
+  }
+  return value;
+};
+
+const parseEnvironment = (): "development" | "test" | "production" => {
+  const value = process.env.NODE_ENV?.trim() || "development";
+  if (value !== "development" && value !== "test" && value !== "production") {
+    throw new Error("NODE_ENV debe ser development, test o production.");
+  }
+  return value;
+};
+
+const parseHttpUrl = (name: string): string => {
+  const value = requireValue(name).replace(/\/$/, "");
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${name} debe ser una URL absoluta válida.`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(`${name} debe utilizar http o https.`);
+  }
+  return value;
+};
+
 export const env = Object.freeze({
+  NODE_ENV: parseEnvironment(),
+  APP_VERSION: process.env.APP_VERSION?.trim() || "1.0.0",
   PORT: parsePort(process.env.PORT),
+  PUBLIC_API_URL: parseHttpUrl("PUBLIC_API_URL"),
+  TRUST_PROXY_HOPS: parseNonNegativeInteger("TRUST_PROXY_HOPS", "0"),
   MONGODB_URI: requireValue("MONGODB_URI"),
   MONGODB_DB_NAME: requireValue("MONGODB_DB_NAME"),
   JWT_SECRET: parseJwtSecret(),
   JWT_EXPIRES_IN: parseExpiration(),
   JWT_ISSUER: process.env.JWT_ISSUER?.trim() || "task-api-express",
   JWT_AUDIENCE: process.env.JWT_AUDIENCE?.trim() || "task-api-client",
-  CORS_ORIGIN: requireValue("CORS_ORIGIN"),
+  CORS_ORIGIN: parseHttpUrl("CORS_ORIGIN"),
   AUTH_RATE_LIMIT_WINDOW_MS: parsePositiveInteger(
     "AUTH_RATE_LIMIT_WINDOW_MS",
     "900000",

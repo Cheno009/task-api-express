@@ -1,5 +1,6 @@
-import express from "express";
-import swaggerUi from "swagger-ui-express";
+import express from 'express';
+import swaggerUi from 'swagger-ui-express';
+import { env } from "./config/env.js";
 import { openApiDocument } from "./docs/openapi.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { notFound } from "./middlewares/not-found.middleware.js";
@@ -15,6 +16,7 @@ import { taskRouter } from "./routes/task.routes.js";
 
 export const app = express();
 app.disable("x-powered-by");
+if (env.TRUST_PROXY_HOPS > 0) app.set("trust proxy", env.TRUST_PROXY_HOPS);
 app.use(requestContext);
 app.get("/api-docs.json", documentationSecurityHeaders, (_req, res): void => {
   res.status(200).json(openApiDocument);

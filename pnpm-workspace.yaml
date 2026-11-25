@@ -3,5 +3,4 @@ packages:
   - client
 allowBuilds:
   '@scarf/scarf': false
-'@scarf/scarf': false
-esbuild: true
+  esbuild: true
